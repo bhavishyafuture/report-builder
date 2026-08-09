@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assemble — build a report from your photos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/index.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --studio-bg:#15171a;
+    --studio-panel:#1d2023;
+    --studio-panel-2:#23262a;
+    --studio-line:#34383d;
+    --paper:#faf7f0;
+    --paper-shadow: rgba(0,0,0,.45);
+    --ink:#221f1a;
+    --ink-soft2:#6b645a;
+    --teal:#3f9583;
+    --teal-dim:#2e7d6b;
+    --gold:#d4a537;
+    --danger:#c1543a;
+    --text-on-dark:#e9e6df;
+    --text-on-dark-soft:#9a9c9e;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--studio-bg);
+    color:var(--text-on-dark);
+    font-family:'Source Serif 4', serif;
+    overflow:hidden;
+  }
+  .app{display:flex; height:100vh; width:100vw;}
+
+  /* ---------- TOOLBAR ---------- */
+  .toolbar{
+    width:248px;
+    flex-shrink:0;
+    background:var(--studio-panel);
+    border-right:1px solid var(--studio-line);
+    display:flex;
+    flex-direction:column;
+    padding:22px 18px;
+    overflow-y:auto;
+  }
+  .wordmark{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:500;
+    font-size:26px;
+    color:var(--text-on-dark);
+    letter-spacing:.2px;
+    margin:0 0 2px 0;
+  }
+  .wordmark span{color:var(--teal);}
+  .tagline{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--text-on-dark-soft);
+    margin:0 0 26px 0;
+  }
+  .section-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--text-on-dark-soft);
+    margin:0 0 10px 0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .section-label::after{content:''; flex:1; height:1px; background:var(--studio-line);}
+  .tool-group{margin-bottom:26px;}
+  .tool-btn{
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--studio-panel-2);
+    border:1px solid var(--studio-line);
+    color:var(--text-on-dark);
+    font-family:'Source Serif 4', serif;
+    font-size:14.5px;
+    padding:10px 12px;
+    border-radius:3px;
+    cursor:pointer;
+    margin-bottom:8px;
+    transition:border-color .15s ease, transform .1s ease;
+    text-align:left;
+  }
+  .tool-btn:hover{border-color:var(--teal);}
+  .tool-btn:active{transform:scale(.98);}
+  .tool-btn svg{flex-shrink:0; opacity:.85;}
+  .tool-btn.primary{
+    background:var(--teal-dim);
+    border-color:var(--teal-dim);
+    color:#f4fbf9;
+    font-weight:600;
+  }
+  .tool-btn.primary:hover{background:var(--teal);}
+  .tool-btn.ghost{
+    background:transparent;
+    color:var(--text-on-dark-soft);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:.04em;
+    border-style:dashed;
+  }
+  .tool-btn.ghost:hover{color:var(--danger); border-color:var(--danger);}
+  .hint{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:var(--text-on-dark-soft);
+    line-height:1.6;
+    margin-top:auto;
+    padding-top:18px;
+    border-top:1px solid var(--studio-line);
+  }
+
+  /* ---------- WORKSPACE ---------- */
+  .workspace{
+    flex:1;
+    overflow-y:auto;
+    background:
+      radial-gradient(ellipse at 50% 0%, #1b1e22 0%, var(--studio-bg) 65%);
+    padding:56px 40px 120px 40px;
+  }
+  .sheet-row{
+    display:flex;
+    align-items:flex-start;
+    gap:18px;
+    width:fit-content;
+    margin:0 auto;
+  }
+  .spine{
+    width:34px;
+    flex-shrink:0;
+    position:relative;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--text-on-dark-soft);
+  }
+  .spine-track{
+    position:absolute;
+    left:16px; top:0; bottom:0;
+    width:1px;
+    background:var(--studio-line);
+  }
+  .spine-mark{
+    position:absolute;
+    left:0;
+    width:34px;
+    text-align:right;
+    padding-right:8px;
+    transform:translateY(-50%);
+  }
+  .spine-mark::after{
+    content:'';
+    position:absolute;
+    right:-1px; top:50%;
+    width:5px; height:5px;
+    background:var(--gold);
+    border-radius:50%;
+    transform:translateY(-50%);
+  }
+
+  .paper{
+    position:relative;
+    width:794px;
+    min-height:1123px;
+    background:var(--paper);
+    color:var(--ink);
+    box-shadow:0 30px 60px var(--paper-shadow), 0 2px 0 rgba(255,255,255,.02);
+    padding:76px 64px 90px 64px;
+  }
+  .break-line{
+    position:absolute;
+    left:0; right:0;
+    height:0;
+    border-top:1px dashed #cfc6b2;
+    pointer-events:none;
+  }
+  .break-line span{
+    position:absolute;
+    right:0; top:-9px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#b7ac93;
+    background:var(--paper);
+    padding-left:6px;
+  }
+
+  .doc-title{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:34px;
+    line-height:1.2;
+    outline:none;
+    margin:0 0 6px 0;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+  }
+  .doc-sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--ink-soft2);
+    margin:10px 0 40px 0;
+  }
+
+  .empty-state{
+    margin-top:60px;
+    text-align:center;
+    color:var(--ink-soft2);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:.03em;
+    padding:40px 20px;
+    border:1px dashed #d8cfba;
+  }
+
+  .block{
+    position:relative;
+    margin:0 0 26px 0;
+    padding:6px 8px 6px 30px;
+    border-radius:2px;
+    transition:background .12s ease;
+  }
+  .block:hover{background:rgba(63,149,131,.06);}
+  .block.dragging{opacity:.35;}
+  .block .drag-handle{
+    position:absolute;
+    left:0; top:8px;
+    width:20px;
+    cursor:grab;
+    color:#c6bda5;
+    font-size:14px;
+    letter-spacing:-2px;
+    user-select:none;
+    opacity:0;
+    transition:opacity .12s ease;
+  }
+  .block:hover .drag-handle{opacity:1;}
+  .block .block-controls{
+    position:absolute;
+    right:6px; top:2px;
+    display:flex;
+    gap:4px;
+    opacity:0;
+    transition:opacity .12s ease;
+  }
+  .block:hover .block-controls{opacity:1;}
+  .chip{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9.5px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    background:#efe9d9;
+    border:1px solid #d8cfba;
+    color:var(--ink-soft2);
+    padding:2px 6px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .chip:hover{border-color:var(--teal-dim); color:var(--teal-dim);}
+  .chip.active{background:var(--teal-dim); border-color:var(--teal-dim); color:#fff;}
+  .chip.del{color:var(--danger);}
+  .chip.del:hover{border-color:var(--danger); background:#f6e4de;}
+
+  .block-heading [contenteditable]{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:23px;
+    outline:none;
+    padding:2px 0;
+  }
+  .block-text [contenteditable]{
+    font-family:'Source Serif 4', serif;
+    font-size:15.5px;
+    line-height:1.65;
+    outline:none;
+    padding:2px 0;
+  }
+  [contenteditable]:empty:before{
+    content:attr(data-placeholder);
+    color:#b6ad97;
+  }
+
+  .block-image figure{margin:10px 0 0 0; text-align:center;}
+  .block-image img{
+    display:inline-block;
+    max-width:100%;
+    border:1px solid #e4dcc7;
+    box-shadow:0 6px 18px rgba(0,0,0,.08);
+  }
+  .block-image.size-s img{width:38%;}
+  .block-image.size-m img{width:64%;}
+  .block-image.size-l img{width:100%;}
+  .block-image figcaption{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft2);
+    outline:none;
+    margin-top:9px;
+    padding:2px 0;
+  }
+  .size-chips{display:inline-flex; gap:4px; margin-right:6px;}
+
+  /* ---------- OVERLAY ---------- */
+  .overlay{
+    position:fixed; inset:0;
+    background:rgba(12,13,15,.72);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+    flex-direction:column;
+    gap:14px;
+  }
+  .overlay.show{display:flex;}
+  .spinner{
+    width:34px; height:34px;
+    border:3px solid #3a3d41;
+    border-top-color:var(--teal);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .overlay-text{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:.04em;
+    color:var(--text-on-dark);
+  }
+
+  @media (max-width: 900px){
+    .app{flex-direction:column;}
+    .toolbar{width:100%; flex-direction:row; flex-wrap:wrap; align-items:center; padding:14px;}
+    .wordmark, .tagline, .hint{display:none;}
+    .tool-group{margin-bottom:0; margin-right:8px; display:flex; gap:6px;}
+    .tool-btn{width:auto; margin-bottom:0;}
+    .workspace{padding:24px 10px;}
+    .paper{width:100%; min-width:320px; padding:36px 20px;}
+    .spine{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="toolbar">
+    <p class="wordmark">Assemble<span>.</span></p>
+    <p class="tagline">Photos in. Report out.</p>
+
+    <div class="tool-group">
+      <p class="section-label">Add</p>
+      <button class="tool-btn" id="btnAddImage">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Photos
+      </button>
+      <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+      <button class="tool-btn" id="btnAddHeading">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+        Heading
+      </button>
+      <button class="tool-btn" id="btnAddText">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+        Paragraph
+      </button>
+    </div>
+
+    <div class="tool-group">
+      <p class="section-label">Export</p>
+      <button class="tool-btn primary" id="btnExportPdf">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+        Download PDF
+      </button>
+      <button class="tool-btn primary" id="btnExportDocx">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+        Download Word
+      </button>
+    </div>
+
+    <div class="tool-group">
+      <button class="tool-btn ghost" id="btnClear">Clear the page</button>
+    </div>
+
+    <p class="hint">Drag the ⠿ handle to reorder. The ruler at left marks where each printed page will break.</p>
+  </aside>
+
+  <div class="workspace" id="workspace">
+    <div class="sheet-row">
+      <div class="spine" id="spine">
+        <div class="spine-track"></div>
+      </div>
+      <div class="paper" id="paper">
+        <div class="doc-title" contenteditable="true" data-placeholder="Untitled report" id="docTitle">Untitled report</div>
+        <div class="doc-sub" id="docSub">Assembled with Assemble</div>
+        <div id="blockList"></div>
+        <div class="empty-state" id="emptyState">Your page is empty — add a heading, a paragraph, or a photo to begin.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="spinner"></div>
+  <div class="overlay-text" id="overlayText">Working…</div>
+</div>
+
+<script>
+(function(){
+  const PAGE_W = 794, PAGE_H = 1123;
+  const paper = document.getElementById('paper');
+  const blockList = document.getElementById('blockList');
+  const emptyState = document.getElementById('emptyState');
+  const spine = document.getElementById('spine');
+  const workspace = document.getElementById('workspace');
+  const overlay = document.getElementById('overlay');
+  const overlayText = document.getElementById('overlayText');
+  let uid = 0;
+
+  function showOverlay(msg){ overlayText.textContent = msg; overlay.classList.add('show'); }
+  function hideOverlay(){ overlay.classList.remove('show'); }
+
+  function updateEmptyState(){
+    emptyState.style.display = blockList.children.length ? 'none' : 'block';
+  }
+
+  function iconSvg(){ /* unused placeholder */ }
+
+  function makeControls(onDelete, extra){
+    const wrap = document.createElement('div');
+    wrap.className = 'block-controls';
+    if (extra) wrap.appendChild(extra);
+    const del = document.createElement('span');
+    del.className = 'chip del';
+    del.textContent = '✕ remove';
+    del.onclick = onDelete;
+    wrap.appendChild(del);
+    return wrap;
+  }
+
+  function makeHandle(){
+    const h = document.createElement('div');
+    h.className = 'drag-handle';
+    h.textContent = '⠿';
+    return h;
+  }
+
+  function attachDrag(block){
+    block.draggable = true;
+    block.addEventListener('dragstart', e=>{
+      block.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', block.dataset.id);
+    });
+    block.addEventListener('dragend', ()=>{
+      block.classList.remove('dragging');
+      renderPagination();
+    });
+  }
+
+  blockList.addEventListener('dragover', e=>{
+    e.preventDefault();
+    const dragging = blockList.querySelector('.dragging');
+    if (!dragging) return;
+    const after = getDragAfter(e.clientY);
+    if (after == null) blockList.appendChild(dragging);
+    else blockList.insertBefore(dragging, after);
+  });
+
+  function getDragAfter(y){
+    const els = [...blockList.querySelectorAll('.block:not(.dragging)')];
+    let closest = {offset: -Infinity, el: null};
+    for (const el of els){
+      const box = el.getBoundingClientRect();
+      const offset = y - box.top - box.height/2;
+      if (offset < 0 && offset > closest.offset) closest = {offset, el};
+    }
+    return closest.el;
+  }
+
+  function addHeading(){
+    const block = document.createElement('div');
+    block.className = 'block block-heading';
+    block.dataset.id = ++uid;
+    block.dataset.type = 'heading';
+    const handle = makeHandle();
+    const editable = document.createElement('div');
+    editable.contentEditable = 'true';
+    editable.setAttribute('data-placeholder','Section heading');
+    editable.addEventListener('input', renderPaginationDebounced);
+    const controls = makeControls(()=>{ block.remove(); updateEmptyState(); renderPagination(); });
+    block.append(handle, editable, controls);
+    attachDrag(block);
+    blockList.appendChild(block);
+    updateEmptyState();
+    renderPagination();
+    editable.focus();
+  }
+
+  function addText(){
+    const block = document.createElement('div');
+    block.className = 'block block-text';
+    block.dataset.id = ++uid;
+    block.dataset.type = 'text';
+    const handle = makeHandle();
+    const editable = document.createElement('div');
+    editable.contentEditable = 'true';
+    editable.setAttribute('data-placeholder','Write a paragraph…');
+    editable.addEventListener('input', renderPaginationDebounced);
+    const controls = makeControls(()=>{ block.remove(); updateEmptyState(); renderPagination(); });
+    block.append(handle, editable, controls);
+    attachDrag(block);
+    blockList.appendChild(block);
+    updateEmptyState();
+    renderPagination();
+    editable.focus();
+  }
+
+  function addImages(fileList){
+    [...fileList].forEach(file=>{
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = ev=>{
+        const block = document.createElement('div');
+        block.className = 'block block-image size-m';
+        block.dataset.id = ++uid;
+        block.dataset.type = 'image';
+        const handle = makeHandle();
+
+        const figure = document.createElement('figure');
+        const img = document.createElement('img');
+        img.src = ev.target.result;
+        img.alt = file.name;
+        const caption = document.createElement('figcaption');
+        caption.contentEditable = 'true';
+        caption.setAttribute('data-placeholder', 'Caption (optional)');
+        caption.addEventListener('input', renderPaginationDebounced);
+        figure.append(img, caption);
+
+        const sizeWrap = document.createElement('span');
+        sizeWrap.className = 'size-chips';
+        ['S','M','L'].forEach((label, i)=>{
+          const c = document.createElement('span');
+          c.className = 'chip' + (label==='M' ? ' active' : '');
+          c.textContent = label;
+          c.onclick = ()=>{
+            block.classList.remove('size-s','size-m','size-l');
+            block.classList.add(['size-s','size-m','size-l'][i]);
+            sizeWrap.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+            c.classList.add('active');
+            renderPagination();
+          };
+          sizeWrap.appendChild(c);
+        });
+
+        const controls = makeControls(()=>{ block.remove(); updateEmptyState(); renderPagination(); }, sizeWrap);
+        block.append(handle, figure, controls);
+        attachDrag(block);
+        blockList.appendChild(block);
+        updateEmptyState();
+        img.onload = renderPagination;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  let debounceTimer;
+  function renderPaginationDebounced(){
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(renderPagination, 250);
+  }
+
+  function renderPagination(){
+    paper.querySelectorAll('.break-line').forEach(n=>n.remove());
+    const h = paper.scrollHeight;
+    const pageCount = Math.max(1, Math.ceil(h / PAGE_H));
+    for (let i=1; i<pageCount; i++){
+      const line = document.createElement('div');
+      line.className = 'break-line';
+      line.style.top = (i*PAGE_H) + 'px';
+      const label = document.createElement('span');
+      label.textContent = 'page ' + (i+1);
+      line.appendChild(label);
+      paper.appendChild(line);
+    }
+    spine.querySelectorAll('.spine-mark').forEach(n=>n.remove());
+    for (let i=0; i<pageCount; i++){
+      const mark = document.createElement('div');
+      mark.className = 'spine-mark';
+      mark.style.top = (i*PAGE_H + PAGE_H/2) + 'px';
+      mark.textContent = String(i+1).padStart(2,'0');
+      spine.appendChild(mark);
+    }
+    spine.style.height = (pageCount*PAGE_H) + 'px';
+  }
+
+  document.getElementById('btnAddHeading').onclick = addHeading;
+  document.getElementById('btnAddText').onclick = addText;
+  document.getElementById('btnAddImage').onclick = ()=> document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange = e=>{ addImages(e.target.files); e.target.value=''; };
+  document.getElementById('docTitle').addEventListener('input', renderPaginationDebounced);
+  document.getElementById('btnClear').onclick = ()=>{
+    if (!confirm('Clear everything on the page? This cannot be undone.')) return;
+    blockList.innerHTML = '';
+    document.getElementById('docTitle').textContent = 'Untitled report';
+    updateEmptyState();
+    renderPagination();
+  };
+
+  // ---------------- EXPORT: PDF ----------------
+  document.getElementById('btnExportPdf').onclick = async ()=>{
+    showOverlay('Rendering pages…');
+    try{
+      paper.querySelectorAll('.break-line').forEach(n=> n.style.visibility='hidden');
+      const canvas = await html2canvas(paper, {scale:2, backgroundColor:'#faf7f0', useCORS:true});
+      paper.querySelectorAll('.break-line').forEach(n=> n.style.visibility='visible');
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p','pt','a4');
+      const pageWPt = pdf.internal.pageSize.getWidth();
+      const pageHPt = pdf.internal.pageSize.getHeight();
+      const scaleFactor = canvas.width / paper.offsetWidth;
+      const sliceHPx = PAGE_H * scaleFactor;
+      const totalPages = Math.max(1, Math.ceil(canvas.height / sliceHPx));
+
+      for (let i=0; i<totalPages; i++){
+        const sh = Math.min(sliceHPx, canvas.height - i*sliceHPx);
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width;
+        tmp.height = sh;
+        const ctx = tmp.getContext('2d');
+        ctx.fillStyle = '#faf7f0';
+        ctx.fillRect(0,0,tmp.width,tmp.height);
+        ctx.drawImage(canvas, 0, i*sliceHPx, canvas.width, sh, 0, 0, canvas.width, sh);
+        const imgData = tmp.toDataURL('image/jpeg', 0.92);
+        if (i>0) pdf.addPage();
+        const hPt = (sh/scaleFactor) * (pageWPt/PAGE_W);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWPt, hPt);
+      }
+      const title = (document.getElementById('docTitle').innerText||'report').trim().slice(0,60).replace(/[^\w\-]+/g,'-') || 'report';
+      pdf.save(title + '.pdf');
+    } catch(err){
+      console.error(err);
+      alert('Something went wrong creating the PDF. Please try again.');
+    } finally {
+      hideOverlay();
+    }
+  };
+
+  // ---------------- EXPORT: DOCX ----------------
+  document.getElementById('btnExportDocx').onclick = async ()=>{
+    showOverlay('Building document…');
+    try{
+      const docx = window.docx;
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } = docx;
+      const children = [];
+
+      const titleText = document.getElementById('docTitle').innerText.trim() || 'Untitled report';
+      children.push(new Paragraph({ text: titleText, heading: HeadingLevel.TITLE }));
+      children.push(new Paragraph({ text: '', spacing:{after:200} }));
+
+      const blocks = [...blockList.children];
+      for (const block of blocks){
+        const type = block.dataset.type;
+        if (type === 'heading'){
+          const text = block.querySelector('[contenteditable]').innerText.trim();
+          if (text) children.push(new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing:{before:200, after:120} }));
+        } else if (type === 'text'){
+          const raw = block.querySelector('[contenteditable]').innerText;
+          const lines = raw.split('\n').filter(l=>l.trim().length);
+          if (!lines.length){
+            children.push(new Paragraph({ children:[ new TextRun({text: raw.trim()||''}) ] }));
+          } else {
+            lines.forEach(line=>{
+              children.push(new Paragraph({ children:[ new TextRun(line) ], spacing:{after:120} }));
+            });
+          }
+        } else if (type === 'image'){
+          const img = block.querySelector('img');
+          const captionText = block.querySelector('figcaption').innerText.trim();
+          const buf = await fetch(img.src).then(r=>r.arrayBuffer());
+          const contentWidthPx = 600;
+          let factor = 0.65;
+          if (block.classList.contains('size-s')) factor = 0.4;
+          if (block.classList.contains('size-l')) factor = 1.0;
+          const targetW = Math.round(contentWidthPx * factor);
+          const nw = img.naturalWidth || targetW;
+          const nh = img.naturalHeight || targetW;
+          const targetH = Math.round(targetW * (nh/nw));
+          children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing:{before:160, after: captionText ? 40 : 160},
+            children:[ new ImageRun({ data: buf, transformation:{ width: targetW, height: targetH } }) ]
+          }));
+          if (captionText){
+            children.push(new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing:{after:200},
+              children:[ new TextRun({ text: captionText, italics:true, size:18, color:'666666' }) ]
+            }));
+          }
+        }
+      }
+
+      const doc = new Document({ sections: [{ properties: {}, children }] });
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const filename = titleText.slice(0,60).replace(/[^\w\-]+/g,'-') || 'report';
+      a.href = url; a.download = filename + '.docx';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch(err){
+      console.error(err);
+      alert('Something went wrong creating the Word file. Please try again.');
+    } finally {
+      hideOverlay();
+    }
+  };
+
+  updateEmptyState();
+  renderPagination();
+})();
+</script>
+</body>
+</html>
