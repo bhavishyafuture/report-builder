@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assemble — build a photo report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/index.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --studio-bg:#15171a;
+    --studio-panel:#1d2023;
+    --studio-panel-2:#23262a;
+    --studio-line:#34383d;
+    --paper:#faf7f0;
+    --paper-shadow: rgba(0,0,0,.45);
+    --ink:#221f1a;
+    --ink-soft2:#6b645a;
+    --teal:#3f9583;
+    --teal-dim:#2e7d6b;
+    --gold:#d4a537;
+    --danger:#c1543a;
+    --text-on-dark:#e9e6df;
+    --text-on-dark-soft:#9a9c9e;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--studio-bg);
+    color:var(--text-on-dark);
+    font-family:'Source Serif 4', serif;
+    overflow:hidden;
+  }
+  .app{display:flex; height:100vh; width:100vw;}
+
+  /* ---------- TOOLBAR ---------- */
+  .toolbar{
+    width:248px;
+    flex-shrink:0;
+    background:var(--studio-panel);
+    border-right:1px solid var(--studio-line);
+    display:flex;
+    flex-direction:column;
+    padding:22px 18px;
+    overflow-y:auto;
+  }
+  .wordmark{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:500;
+    font-size:26px;
+    color:var(--text-on-dark);
+    margin:0 0 2px 0;
+  }
+  .wordmark span{color:var(--teal);}
+  .tagline{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--text-on-dark-soft);
+    margin:0 0 26px 0;
+  }
+  .section-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--text-on-dark-soft);
+    margin:0 0 10px 0;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-label::after{content:''; flex:1; height:1px; background:var(--studio-line);}
+  .tool-group{margin-bottom:26px;}
+  .tool-btn{
+    width:100%;
+    display:flex; align-items:center; gap:10px;
+    background:var(--studio-panel-2);
+    border:1px solid var(--studio-line);
+    color:var(--text-on-dark);
+    font-family:'Source Serif 4', serif;
+    font-size:14.5px;
+    padding:10px 12px;
+    border-radius:3px;
+    cursor:pointer;
+    margin-bottom:8px;
+    text-align:left;
+  }
+  .tool-btn:hover{border-color:var(--teal);}
+  .tool-btn:active{transform:scale(.98);}
+  .tool-btn svg{flex-shrink:0; opacity:.85;}
+  .tool-btn.primary{background:var(--teal-dim); border-color:var(--teal-dim); color:#f4fbf9; font-weight:600;}
+  .tool-btn.primary:hover{background:var(--teal);}
+  .tool-btn.ghost{
+    background:transparent; color:var(--text-on-dark-soft);
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.04em;
+    border-style:dashed;
+  }
+  .tool-btn.ghost:hover{color:var(--danger); border-color:var(--danger);}
+  .hint{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--text-on-dark-soft);
+    line-height:1.6; margin-top:auto; padding-top:18px; border-top:1px solid var(--studio-line);
+  }
+
+  /* ---------- WORKSPACE ---------- */
+  .workspace{
+    flex:1; overflow-y:auto;
+    background: radial-gradient(ellipse at 50% 0%, #1b1e22 0%, var(--studio-bg) 65%);
+    padding:40px 40px 120px 40px;
+  }
+  .doc-title-wrap{ max-width:794px; margin:0 auto 20px auto; }
+  .doc-title{
+    font-family:'Fraunces', serif; font-weight:600; font-size:26px; color:var(--text-on-dark);
+    outline:none; border-bottom:1px solid var(--studio-line); padding-bottom:10px;
+  }
+  .doc-title:empty:before{ content:attr(data-placeholder); color:var(--text-on-dark-soft); font-style:italic; }
+  .doc-title-hint{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--text-on-dark-soft);
+    margin-top:6px; letter-spacing:.03em;
+  }
+
+  .sheet-row{ display:flex; align-items:flex-start; gap:18px; width:fit-content; margin:0 auto; }
+  .spine{ width:34px; flex-shrink:0; position:relative; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-on-dark-soft); }
+  .spine-track{ position:absolute; left:16px; top:0; bottom:0; width:1px; background:var(--studio-line); }
+  .spine-mark{ position:absolute; left:0; width:34px; text-align:right; padding-right:8px; transform:translateY(-50%); }
+  .spine-mark::after{ content:''; position:absolute; right:-1px; top:50%; width:5px; height:5px; background:var(--gold); border-radius:50%; transform:translateY(-50%); }
+
+  .sheets{ display:flex; flex-direction:column; gap:28px; }
+  .sheet{
+    position:relative;
+    width:794px; height:1123px;
+    background:var(--paper);
+    box-shadow:0 30px 60px var(--paper-shadow), 0 2px 0 rgba(255,255,255,.02);
+    display:flex; align-items:center; justify-content:center;
+    padding:56px;
+  }
+  .sheet img{ max-width:100%; max-height:100%; object-fit:contain; display:block; box-shadow:0 4px 16px rgba(0,0,0,.15); }
+  .sheet .drag-handle{
+    position:absolute; left:14px; top:14px; color:#c6bda5; font-size:16px; letter-spacing:-2px;
+    cursor:grab; opacity:0; transition:opacity .12s ease; user-select:none;
+  }
+  .sheet:hover .drag-handle{ opacity:1; }
+  .sheet .del-btn{
+    position:absolute; right:14px; top:14px;
+    font-family:'IBM Plex Mono', monospace; font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+    background:#efe9d9; border:1px solid #d8cfba; color:var(--danger);
+    padding:4px 8px; border-radius:2px; cursor:pointer; opacity:0; transition:opacity .12s ease;
+  }
+  .sheet:hover .del-btn{ opacity:1; }
+  .sheet .page-tag{
+    position:absolute; left:14px; bottom:14px;
+    font-family:'IBM Plex Mono', monospace; font-size:10px; color:#b7ac93; letter-spacing:.06em;
+  }
+  .sheet .caption-trigger{
+    position:absolute; right:14px; bottom:14px;
+    font-family:'IBM Plex Mono', monospace; font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--ink-soft2); background:transparent; border:1px dashed #d8cfba;
+    padding:4px 8px; border-radius:2px; cursor:pointer; opacity:0; transition:opacity .12s ease;
+  }
+  .sheet:hover .caption-trigger{ opacity:1; }
+  .sheet .caption{
+    position:absolute; left:14px; right:14px; bottom:36px; text-align:center;
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft2);
+    outline:none; display:none;
+  }
+  .sheet .caption.show{ display:block; }
+  .sheet .caption:empty:before{ content:attr(data-placeholder); color:#b6ad97; }
+
+  .empty-state{
+    width:794px; text-align:center; color:var(--text-on-dark-soft);
+    font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.03em;
+    padding:70px 20px; border:1px dashed var(--studio-line); border-radius:4px;
+  }
+
+  /* ---------- MODALS ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(12,13,15,.72);
+    display:none; align-items:center; justify-content:center; z-index:60; padding:24px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-box{
+    background:var(--studio-panel); border:1px solid var(--studio-line); border-radius:6px;
+    width:100%; max-width:640px; max-height:88vh; overflow-y:auto; padding:26px;
+  }
+  .modal-head{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;}
+  .modal-head h3{ font-family:'Fraunces', serif; font-weight:600; font-size:19px; margin:0; color:var(--text-on-dark); }
+  .modal-close{ background:none; border:none; color:var(--text-on-dark-soft); font-size:20px; line-height:1; cursor:pointer; padding:2px 6px; }
+  .modal-close:hover{ color:var(--text-on-dark); }
+  .modal-note{ font-family:'IBM Plex Mono', monospace; font-size:11px; line-height:1.7; color:var(--text-on-dark-soft); margin:6px 0 16px 0; }
+  .mode-row{ display:flex; gap:8px; margin:0 0 14px 0; }
+  .mode-chip{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; padding:8px 12px; border-radius:4px;
+    border:1px solid var(--studio-line); background:var(--studio-panel-2); color:var(--text-on-dark-soft); cursor:pointer;
+  }
+  .mode-chip.active{ border-color:var(--teal); color:var(--text-on-dark); background:rgba(63,149,131,.12); }
+  .dropzone{
+    border:1.5px dashed var(--studio-line); border-radius:5px; padding:34px 16px; text-align:center; cursor:pointer;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--teal); background:rgba(63,149,131,.06); }
+  .dropzone .dz-title{ font-family:'Source Serif 4', serif; font-size:14.5px; margin-bottom:4px; color:var(--text-on-dark); }
+  .dropzone .dz-sub{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--text-on-dark-soft); text-transform:uppercase; letter-spacing:.05em; }
+  .file-chip{
+    display:none; align-items:center; justify-content:space-between; background:var(--studio-panel-2);
+    border:1px solid var(--studio-line); border-radius:4px; padding:9px 13px; margin-top:12px;
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-on-dark);
+  }
+  .file-chip button{ background:none; border:none; color:var(--danger); font-family:'IBM Plex Mono', monospace; font-size:11px; cursor:pointer; }
+  .modal-actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  .modal-preview{ display:none; margin-top:22px; }
+  .modal-preview .preview-label{ font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-on-dark-soft); margin-bottom:8px; }
+  .word-paper{
+    background:var(--paper); color:var(--ink); width:100%; padding:34px 30px;
+    font-family:'Source Serif 4', serif; font-size:13.5px; line-height:1.6; box-shadow:0 12px 26px var(--paper-shadow);
+  }
+  .word-paper h1,.word-paper h2,.word-paper h3{ font-family:'Fraunces', serif; font-weight:600; margin-top:1.1em; }
+  .word-paper img{ max-width:100%; height:auto; display:block; margin:10px auto; }
+  .word-paper table{ border-collapse:collapse; width:100%; margin:12px 0; font-size:12.5px; }
+  .word-paper table td, .word-paper table th{ border:1px solid #ccc3ac; padding:5px 7px; }
+  .word-paper p{ margin:.5em 0; }
+  .pdf-page-block{ border-bottom:1px dashed #d8cfba; padding-bottom:12px; margin-bottom:12px; }
+  .pdf-page-block:last-child{ border-bottom:none; }
+  .pdf-page-label{ font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft2); margin-bottom:6px; }
+  .pdf-page-block img{ border:1px solid #e4dcc7; width:100%; }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(12,13,15,.72);
+    display:none; align-items:center; justify-content:center; z-index:70; flex-direction:column; gap:14px;
+  }
+  .overlay.show{display:flex;}
+  .spinner{ width:34px; height:34px; border:3px solid #3a3d41; border-top-color:var(--teal); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .overlay-text{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-on-dark); }
+
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-family:'IBM Plex Mono', monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-on-dark-soft); margin-bottom:6px; }
+  .field select, .field input[type="number"], .field input[type="text"]{
+    width:100%; background:var(--studio-panel-2); border:1px solid var(--studio-line); color:var(--text-on-dark);
+    font-family:'Source Serif 4', serif; font-size:13.5px; padding:8px 10px; border-radius:3px;
+  }
+  .field-row{ display:flex; gap:12px; }
+  .field-row .field{ flex:1; }
+  .tool-list{ list-style:none; margin:14px 0 0 0; padding:0; max-height:260px; overflow-y:auto; }
+  .tool-list li{
+    display:flex; align-items:center; gap:10px; background:var(--studio-panel-2); border:1px solid var(--studio-line);
+    border-radius:4px; padding:8px 10px; margin-bottom:8px; font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+  }
+  .tool-list li img{ width:34px; height:34px; object-fit:cover; border-radius:2px; flex-shrink:0; }
+  .tool-list li .list-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-on-dark); }
+  .tool-list li button{
+    background:none; border:1px solid var(--studio-line); color:var(--text-on-dark-soft);
+    font-family:'IBM Plex Mono', monospace; font-size:10px; padding:3px 7px; border-radius:2px; cursor:pointer;
+  }
+  .tool-list li button:hover{ color:var(--text-on-dark); border-color:var(--teal); }
+  .tool-list li button.remove:hover{ color:var(--danger); border-color:var(--danger); }
+  .crop-preview-wrap{ position:relative; display:inline-block; margin-top:14px; max-width:100%; }
+  .crop-preview-wrap img{ display:block; max-width:100%; border:1px solid var(--studio-line); }
+  .crop-box{ position:absolute; border:2px dashed var(--gold); pointer-events:none; background:rgba(212,165,55,.08); }
+  .status-text{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-on-dark-soft); margin-top:12px; }
+
+  @media (max-width: 900px){
+    .app{flex-direction:column;}
+    .toolbar{width:100%; flex-direction:row; flex-wrap:wrap; align-items:center; padding:14px;}
+    .wordmark, .tagline, .hint{display:none;}
+    .tool-group{margin-bottom:0; margin-right:8px; display:flex; gap:6px;}
+    .tool-btn{width:auto; margin-bottom:0;}
+    .workspace{padding:20px 10px;}
+    .sheet{width:100%; min-width:300px; height:auto; aspect-ratio:794/1123; padding:24px;}
+    .spine{display:none;}
+    .empty-state{width:100%;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="toolbar">
+    <p class="wordmark">Assemble<span>.</span></p>
+    <p class="tagline">Photos in. PDF out.</p>
+
+    <div class="tool-group">
+      <p class="section-label">Add</p>
+      <button class="tool-btn" id="btnAddImage">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Photos
+      </button>
+      <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+    </div>
+
+    <div class="tool-group">
+      <p class="section-label">Export</p>
+      <button class="tool-btn primary" id="btnExportPdf">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+        Download PDF
+      </button>
+    </div>
+
+    <div class="tool-group">
+      <p class="section-label">Convert</p>
+      <button class="tool-btn" id="btnOpenWordModal">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        Word file → PDF
+      </button>
+    </div>
+
+    <div class="tool-group">
+      <p class="section-label">More tools</p>
+      <button class="tool-btn" id="btnOpenJpgModal">JPG to PDF</button>
+      <button class="tool-btn" id="btnOpenMergeModal">Merge PDF files</button>
+      <button class="tool-btn" id="btnOpenSplitModal">Split PDF file</button>
+      <button class="tool-btn" id="btnOpenCompressModal">Compress PDF file</button>
+      <button class="tool-btn" id="btnOpenPptModal">PDF to PowerPoint</button>
+      <button class="tool-btn" id="btnOpenCropModal">Crop PDF</button>
+      <button class="tool-btn" id="btnOpenPageNumModal">Add page numbers</button>
+    </div>
+
+    <div class="tool-group">
+      <button class="tool-btn ghost" id="btnClear">Clear the page</button>
+    </div>
+
+    <p class="hint">Drag the ⠿ handle to reorder photos. Each photo gets its own page, sized to fit automatically at full quality.</p>
+  </aside>
+
+  <div class="workspace" id="workspace">
+    <div class="doc-title-wrap">
+      <div class="doc-title" contenteditable="true" data-placeholder="Add a report title (optional)" id="docTitle"></div>
+      <p class="doc-title-hint">If filled in, this becomes its own cover page in the PDF.</p>
+    </div>
+    <div class="sheet-row">
+      <div class="spine" id="spine"><div class="spine-track"></div></div>
+      <div class="sheets" id="sheets">
+        <div class="empty-state" id="emptyState">Your page is empty — add some photos to begin. Each one becomes its own page.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="spinner"></div>
+  <div class="overlay-text" id="overlayText">Working…</div>
+</div>
+
+<!-- WORD -> PDF MODAL -->
+<div class="modal-backdrop" id="wordModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Word file → PDF</h3>
+      <button class="modal-close" id="wordModalClose">✕</button>
+    </div>
+    <p class="modal-note">Upload a .docx file and convert it straight to a PDF. Works best for text, headings, images, lists and simple tables.</p>
+    <div class="dropzone" id="dzWordModal">
+      <div class="dz-title">Drop your .docx file here</div>
+      <div class="dz-sub">or click to browse</div>
+    </div>
+    <input type="file" id="wordModalInput" accept=".docx" style="display:none;">
+    <div class="file-chip" id="wordModalChip"><span id="wordModalFileName"></span><button id="wordModalClear">remove</button></div>
+    <div class="modal-actions">
+      <button class="tool-btn primary" id="btnConvertWordModal" disabled style="width:auto;">Convert to PDF</button>
+      <button class="tool-btn primary" id="btnDownloadWordPdf" style="width:auto; display:none;">Download PDF</button>
+    </div>
+    <div class="modal-preview" id="wordModalPreviewWrap">
+      <p class="preview-label">Preview</p>
+      <div class="word-paper" id="wordModalPaper"></div>
+    </div>
+  </div>
+</div>
+
+<!-- JPG TO PDF MODAL -->
+<div class="modal-backdrop" id="jpgModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>JPG to PDF</h3><button class="modal-close" data-close="jpgModalBackdrop">✕</button></div>
+    <p class="modal-note">Turn one or more images into a PDF — one photo per page, full quality, auto margins.</p>
+    <div class="dropzone" id="dzJpgModal"><div class="dz-title">Drop images here</div><div class="dz-sub">or click to browse (multiple allowed)</div></div>
+    <input type="file" id="jpgModalInput" accept="image/*" multiple style="display:none;">
+    <ul class="tool-list" id="jpgList"></ul>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnConvertJpg" disabled style="width:auto;">Convert to PDF</button></div>
+  </div>
+</div>
+
+<!-- MERGE PDF MODAL -->
+<div class="modal-backdrop" id="mergeModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Merge PDF files</h3><button class="modal-close" data-close="mergeModalBackdrop">✕</button></div>
+    <p class="modal-note">Combine multiple PDFs into one file, in the order you choose. Use the arrows to reorder.</p>
+    <div class="dropzone" id="dzMergeModal"><div class="dz-title">Drop PDF files here</div><div class="dz-sub">or click to browse (multiple allowed)</div></div>
+    <input type="file" id="mergeModalInput" accept=".pdf" multiple style="display:none;">
+    <ul class="tool-list" id="mergeList"></ul>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnMergePdf" disabled style="width:auto;">Merge PDFs</button></div>
+  </div>
+</div>
+
+<!-- SPLIT PDF MODAL -->
+<div class="modal-backdrop" id="splitModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Split PDF file</h3><button class="modal-close" data-close="splitModalBackdrop">✕</button></div>
+    <p class="modal-note">Pull pages out of a PDF, or break it into single-page files. You'll get a .zip with the results.</p>
+    <div class="mode-row">
+      <div class="mode-chip active" data-splitmode="each">Every page separately</div>
+      <div class="mode-chip" data-splitmode="at">Split at a page number</div>
+    </div>
+    <div class="dropzone" id="dzSplitModal"><div class="dz-title">Drop a PDF file here</div><div class="dz-sub">or click to browse</div></div>
+    <input type="file" id="splitModalInput" accept=".pdf" style="display:none;">
+    <div class="file-chip" id="splitModalChip"><span id="splitModalFileName"></span><button id="splitModalClear">remove</button></div>
+    <div class="field" id="splitAtField" style="display:none; margin-top:14px;">
+      <label>Split after page number</label>
+      <input type="number" id="splitAtValue" min="1" value="1">
+    </div>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnSplitPdf" disabled style="width:auto;">Split PDF</button></div>
+    <p class="status-text" id="splitStatus"></p>
+  </div>
+</div>
+
+<!-- COMPRESS PDF MODAL -->
+<div class="modal-backdrop" id="compressModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Compress PDF file</h3><button class="modal-close" data-close="compressModalBackdrop">✕</button></div>
+    <p class="modal-note">Shrinks file size by re-rendering each page as an image at your chosen quality. Note: this makes the text non-selectable (it becomes a picture of the page) — best for PDFs you just need smaller, not ones you need to edit or search.</p>
+    <div class="dropzone" id="dzCompressModal"><div class="dz-title">Drop a PDF file here</div><div class="dz-sub">or click to browse</div></div>
+    <input type="file" id="compressModalInput" accept=".pdf" style="display:none;">
+    <div class="file-chip" id="compressModalChip"><span id="compressModalFileName"></span><button id="compressModalClear">remove</button></div>
+    <div class="field" style="margin-top:14px;">
+      <label>Compression level</label>
+      <select id="compressLevel">
+        <option value="low">Smallest file (lower quality)</option>
+        <option value="medium" selected>Balanced</option>
+        <option value="high">Best quality (larger file)</option>
+      </select>
+    </div>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnCompressPdf" disabled style="width:auto;">Compress PDF</button></div>
+    <p class="status-text" id="compressStatus"></p>
+  </div>
+</div>
+
+<!-- PDF TO POWERPOINT MODAL -->
+<div class="modal-backdrop" id="pptModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>PDF to PowerPoint</h3><button class="modal-close" data-close="pptModalBackdrop">✕</button></div>
+    <p class="modal-note">Turns each PDF page into a slide with the page image full-bleed. Text won't be editable in PowerPoint.</p>
+    <div class="dropzone" id="dzPptModal"><div class="dz-title">Drop a PDF file here</div><div class="dz-sub">or click to browse</div></div>
+    <input type="file" id="pptModalInput" accept=".pdf" style="display:none;">
+    <div class="file-chip" id="pptModalChip"><span id="pptModalFileName"></span><button id="pptModalClear">remove</button></div>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnConvertPpt" disabled style="width:auto;">Convert to PowerPoint</button></div>
+    <p class="status-text" id="pptStatus"></p>
+  </div>
+</div>
+
+<!-- CROP PDF MODAL -->
+<div class="modal-backdrop" id="cropModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Crop PDF</h3><button class="modal-close" data-close="cropModalBackdrop">✕</button></div>
+    <p class="modal-note">Trim margins from a PDF. Set how much to cut from each side (as a percentage of the page), preview on the first page, then apply.</p>
+    <div class="dropzone" id="dzCropModal"><div class="dz-title">Drop a PDF file here</div><div class="dz-sub">or click to browse</div></div>
+    <input type="file" id="cropModalInput" accept=".pdf" style="display:none;">
+    <div class="file-chip" id="cropModalChip"><span id="cropModalFileName"></span><button id="cropModalClear">remove</button></div>
+    <div class="field-row" style="margin-top:14px;">
+      <div class="field"><label>Top %</label><input type="number" id="cropTop" min="0" max="45" value="0"></div>
+      <div class="field"><label>Bottom %</label><input type="number" id="cropBottom" min="0" max="45" value="0"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Left %</label><input type="number" id="cropLeft" min="0" max="45" value="0"></div>
+      <div class="field"><label>Right %</label><input type="number" id="cropRight" min="0" max="45" value="0"></div>
+    </div>
+    <div class="field">
+      <label>Apply to</label>
+      <select id="cropScope"><option value="all">All pages</option><option value="first">This (first) page only</option></select>
+    </div>
+    <div class="crop-preview-wrap" id="cropPreviewWrap" style="display:none;">
+      <img id="cropPreviewImg">
+      <div class="crop-box" id="cropBoxOverlay"></div>
+    </div>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnApplyCrop" disabled style="width:auto;">Apply crop &amp; download</button></div>
+    <p class="status-text" id="cropStatus"></p>
+  </div>
+</div>
+
+<!-- PAGE NUMBERS MODAL -->
+<div class="modal-backdrop" id="pageNumModalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Add page numbers</h3><button class="modal-close" data-close="pageNumModalBackdrop">✕</button></div>
+    <p class="modal-note">Stamps a page number onto every page of a PDF.</p>
+    <div class="dropzone" id="dzPageNumModal"><div class="dz-title">Drop a PDF file here</div><div class="dz-sub">or click to browse</div></div>
+    <input type="file" id="pageNumModalInput" accept=".pdf" style="display:none;">
+    <div class="file-chip" id="pageNumModalChip"><span id="pageNumModalFileName"></span><button id="pageNumModalClear">remove</button></div>
+    <div class="field-row" style="margin-top:14px;">
+      <div class="field">
+        <label>Position</label>
+        <select id="pageNumPosition">
+          <option value="bottom-center">Bottom center</option>
+          <option value="bottom-right">Bottom right</option>
+          <option value="bottom-left">Bottom left</option>
+          <option value="top-center">Top center</option>
+          <option value="top-right">Top right</option>
+        </select>
+      </div>
+      <div class="field"><label>Start at</label><input type="number" id="pageNumStart" min="1" value="1"></div>
+    </div>
+    <div class="modal-actions"><button class="tool-btn primary" id="btnApplyPageNum" disabled style="width:auto;">Add page numbers &amp; download</button></div>
+    <p class="status-text" id="pageNumStatus"></p>
+  </div>
+</div>
+
+<script>
+(function(){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const sheetsEl = document.getElementById('sheets');
+  const emptyState = document.getElementById('emptyState');
+  const spine = document.getElementById('spine');
+  const docTitle = document.getElementById('docTitle');
+  const overlay = document.getElementById('overlay');
+  const overlayText = document.getElementById('overlayText');
+  const SHEET_H = 1123, GAP = 28;
+  let uid = 0;
+
+  function showOverlay(msg){ overlayText.textContent = msg; overlay.classList.add('show'); }
+  function hideOverlay(){ overlay.classList.remove('show'); }
+  function updateEmptyState(){ emptyState.style.display = sheetsEl.querySelectorAll('.sheet').length ? 'none' : 'block'; }
+
+  function waitForImages(el){
+    const imgs = [...el.querySelectorAll('img')];
+    return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res=>{ img.onload = img.onerror = res; })));
+  }
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------------- PHOTO SHEETS ----------------
+  function addImages(fileList){
+    [...fileList].forEach(file=>{
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = ev=>{
+        const sheet = document.createElement('div');
+        sheet.className = 'sheet';
+        sheet.dataset.id = ++uid;
+        sheet.draggable = true;
+
+        const handle = document.createElement('div');
+        handle.className = 'drag-handle';
+        handle.textContent = '⠿';
+
+        const del = document.createElement('button');
+        del.className = 'del-btn';
+        del.textContent = '✕ remove';
+        del.onclick = ()=>{ sheet.remove(); updateEmptyState(); renderPagination(); };
+
+        const img = document.createElement('img');
+        img.src = ev.target.result;
+        img.alt = file.name;
+
+        const pageTag = document.createElement('div');
+        pageTag.className = 'page-tag';
+
+        const captionTrigger = document.createElement('button');
+        captionTrigger.className = 'caption-trigger';
+        captionTrigger.textContent = '+ caption';
+
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        caption.contentEditable = 'true';
+        caption.setAttribute('data-placeholder', 'Add a caption (for your reference only)');
+        caption.addEventListener('blur', ()=>{
+          if (!caption.innerText.trim()) caption.classList.remove('show');
+        });
+        captionTrigger.onclick = ()=>{ caption.classList.add('show'); caption.focus(); };
+
+        sheet.append(handle, del, img, pageTag, captionTrigger, caption);
+
+        sheet.addEventListener('dragstart', ()=>{ sheet.classList.add('dragging'); });
+        sheet.addEventListener('dragend', ()=>{ sheet.classList.remove('dragging'); renderPagination(); });
+
+        sheetsEl.appendChild(sheet);
+        updateEmptyState();
+
+        img.onload = ()=>{
+          let format = 'JPEG';
+          if (file.type === 'image/png') format = 'PNG';
+          else if (file.type === 'image/jpeg' || file.type === 'image/jpg') format = 'JPEG';
+          else {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth; c.height = img.naturalHeight;
+            c.getContext('2d').drawImage(img, 0, 0);
+            const pngUrl = c.toDataURL('image/png');
+            img.src = pngUrl;
+            format = 'PNG';
+          }
+          sheet.dataset.format = format;
+          renderPagination();
+        };
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  sheetsEl.addEventListener('dragover', e=>{
+    e.preventDefault();
+    const dragging = sheetsEl.querySelector('.dragging');
+    if (!dragging) return;
+    const after = getDragAfter(e.clientY);
+    if (after == null) sheetsEl.appendChild(dragging);
+    else sheetsEl.insertBefore(dragging, after);
+  });
+  function getDragAfter(y){
+    const els = [...sheetsEl.querySelectorAll('.sheet:not(.dragging)')];
+    let closest = {offset:-Infinity, el:null};
+    for (const el of els){
+      const box = el.getBoundingClientRect();
+      const offset = y - box.top - box.height/2;
+      if (offset < 0 && offset > closest.offset) closest = {offset, el};
+    }
+    return closest.el;
+  }
+
+  function renderPagination(){
+    const sheets = [...sheetsEl.querySelectorAll('.sheet')];
+    const hasCover = !!docTitle.innerText.trim();
+    const startAt = hasCover ? 2 : 1;
+    sheets.forEach((sheet, i)=>{
+      sheet.querySelector('.page-tag').textContent = 'page ' + (startAt + i);
+    });
+    spine.querySelectorAll('.spine-mark').forEach(n=>n.remove());
+    const total = sheets.length + (hasCover ? 1 : 0);
+    for (let i=0; i<total; i++){
+      const mark = document.createElement('div');
+      mark.className = 'spine-mark';
+      mark.style.top = (i*(SHEET_H+GAP) + SHEET_H/2) + 'px';
+      mark.textContent = String(i+1).padStart(2,'0');
+      spine.appendChild(mark);
+    }
+    spine.style.height = Math.max(total,1)*(SHEET_H+GAP) + 'px';
+  }
+
+  document.getElementById('btnAddImage').onclick = ()=> document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange = e=>{ addImages(e.target.files); e.target.value=''; };
+  docTitle.addEventListener('input', renderPagination);
+  document.getElementById('btnClear').onclick = ()=>{
+    if (!confirm('Clear everything? This cannot be undone.')) return;
+    sheetsEl.querySelectorAll('.sheet').forEach(s=>s.remove());
+    docTitle.textContent = '';
+    updateEmptyState();
+    renderPagination();
+  };
+
+  // ---------------- EXPORT: build the PDF directly (full image quality, one page each) ----------------
+  document.getElementById('btnExportPdf').onclick = async ()=>{
+    const sheets = [...sheetsEl.querySelectorAll('.sheet')];
+    const titleText = docTitle.innerText.trim();
+    if (!sheets.length && !titleText){ alert('Add at least one photo first.'); return; }
+    showOverlay('Building your PDF…');
+    try{
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p','pt','a4');
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 42;
+      let usedFirstPage = false;
+
+      if (titleText){
+        pdf.setFont('times','bold');
+        pdf.setFontSize(28);
+        const lines = pdf.splitTextToSize(titleText, pageW - 2*margin);
+        const totalH = lines.length * 34;
+        let y = (pageH - totalH)/2;
+        lines.forEach(line=>{
+          const w = pdf.getTextWidth(line);
+          pdf.text(line, (pageW - w)/2, y);
+          y += 34;
+        });
+        usedFirstPage = true;
+      }
+
+      for (const sheet of sheets){
+        if (usedFirstPage) pdf.addPage();
+        usedFirstPage = true;
+        const img = sheet.querySelector('img');
+        const format = sheet.dataset.format || 'JPEG';
+        const nw = img.naturalWidth, nh = img.naturalHeight;
+        const availW = pageW - 2*margin, availH = pageH - 2*margin;
+        const scale = Math.min(availW/nw, availH/nh);
+        const dw = nw*scale, dh = nh*scale;
+        const x = (pageW-dw)/2, y = (pageH-dh)/2;
+        pdf.addImage(img.src, format, x, y, dw, dh, undefined, 'NONE');
+      }
+
+      const filename = (titleText || 'photo-report').slice(0,60).replace(/[^\w\-]+/g,'-') || 'photo-report';
+      pdf.save(filename + '.pdf');
+    } catch(err){
+      console.error(err);
+      alert('Something went wrong creating the PDF. Please try again.');
+    } finally { hideOverlay(); }
+  };
+
+  // ---------------- SHARED: render an HTML element into a PDF (used for Word->PDF) ----------------
+  const PAGE_W = 794, PAGE_H_SLICE = 1123;
+  async function elementToPdf(paperEl, filename, bgColor){
+    const canvas = await html2canvas(paperEl, {scale:2, backgroundColor: bgColor || '#faf7f0', useCORS:true});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p','pt','a4');
+    const pageWPt = pdf.internal.pageSize.getWidth();
+    const scaleFactor = canvas.width / paperEl.offsetWidth;
+    const sliceHPx = PAGE_H_SLICE * scaleFactor;
+    const totalPages = Math.max(1, Math.ceil(canvas.height / sliceHPx));
+    for (let i=0; i<totalPages; i++){
+      const sh = Math.min(sliceHPx, canvas.height - i*sliceHPx);
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width; tmp.height = sh;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = bgColor || '#faf7f0'; ctx.fillRect(0,0,tmp.width,tmp.height);
+      ctx.drawImage(canvas, 0, i*sliceHPx, canvas.width, sh, 0, 0, canvas.width, sh);
+      const imgData = tmp.toDataURL('image/jpeg', 0.95);
+      if (i>0) pdf.addPage();
+      const hPt = (sh/scaleFactor) * (pageWPt/PAGE_W);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageWPt, hPt);
+    }
+    pdf.save(filename);
+  }
+
+  // ---------------- CONVERT: Word (.docx) -> PDF ----------------
+  const wordModalBackdrop = document.getElementById('wordModalBackdrop');
+  const wordModalPaper = document.getElementById('wordModalPaper');
+  const wordModalPreviewWrap = document.getElementById('wordModalPreviewWrap');
+  const wordModalChip = document.getElementById('wordModalChip');
+  const wordModalFileName = document.getElementById('wordModalFileName');
+  const btnConvertWordModal = document.getElementById('btnConvertWordModal');
+  const btnDownloadWordPdf = document.getElementById('btnDownloadWordPdf');
+  const dzWordModal = document.getElementById('dzWordModal');
+  const wordModalInput = document.getElementById('wordModalInput');
+  let wordModalArrayBuffer = null, wordModalBaseName = 'document';
+
+  document.getElementById('btnOpenWordModal').onclick = ()=> wordModalBackdrop.classList.add('show');
+  document.getElementById('wordModalClose').onclick = ()=> wordModalBackdrop.classList.remove('show');
+  wordModalBackdrop.addEventListener('click', e=>{ if (e.target === wordModalBackdrop) wordModalBackdrop.classList.remove('show'); });
+
+  async function handleWordModalFile(file){
+    if (!file.name.toLowerCase().endsWith('.docx')){ alert('Please choose a .docx file.'); return; }
+    wordModalBaseName = file.name.replace(/\.docx$/i,'');
+    wordModalArrayBuffer = await file.arrayBuffer();
+    wordModalFileName.textContent = file.name;
+    wordModalChip.style.display = 'flex';
+    btnConvertWordModal.disabled = false;
+    btnDownloadWordPdf.style.display = 'none';
+    wordModalPreviewWrap.style.display = 'none';
+    wordModalPaper.innerHTML = '';
+  }
+  dzWordModal.onclick = ()=> wordModalInput.click();
+  dzWordModal.addEventListener('dragover', e=>{ e.preventDefault(); dzWordModal.classList.add('drag'); });
+  dzWordModal.addEventListener('dragleave', ()=> dzWordModal.classList.remove('drag'));
+  dzWordModal.addEventListener('drop', e=>{
+    e.preventDefault(); dzWordModal.classList.remove('drag');
+    const f = e.dataTransfer.files[0]; if (f) handleWordModalFile(f);
+  });
+  wordModalInput.addEventListener('change', e=>{ const f = e.target.files[0]; if (f) handleWordModalFile(f); e.target.value=''; });
+  document.getElementById('wordModalClear').onclick = ()=>{
+    wordModalArrayBuffer = null;
+    wordModalChip.style.display = 'none';
+    btnConvertWordModal.disabled = true;
+    btnDownloadWordPdf.style.display = 'none';
+    wordModalPreviewWrap.style.display = 'none';
+  };
+  btnConvertWordModal.onclick = async ()=>{
+    if (!wordModalArrayBuffer) return;
+    showOverlay('Reading your document…');
+    try{
+      const result = await mammoth.convertToHtml(
+        { arrayBuffer: wordModalArrayBuffer },
+        { convertImage: mammoth.images.imgElement(img=>
+            img.read('base64').then(data => ({ src: 'data:' + img.contentType + ';base64,' + data }))
+          )
+        }
+      );
+      wordModalPaper.innerHTML = result.value;
+      wordModalPreviewWrap.style.display = 'block';
+      await waitForImages(wordModalPaper);
+      btnDownloadWordPdf.style.display = 'inline-flex';
+    } catch(err){
+      console.error(err);
+      alert('Could not read that document. Please make sure it is a valid .docx file.');
+    } finally { hideOverlay(); }
+  };
+  btnDownloadWordPdf.onclick = async ()=>{
+    if (!wordModalPaper.innerHTML.trim()) return;
+    showOverlay('Building your PDF…');
+    try{ await elementToPdf(wordModalPaper, wordModalBaseName + '.pdf', '#faf7f0'); }
+    catch(err){ console.error(err); alert('Something went wrong creating the PDF. Please try again.'); }
+    finally { hideOverlay(); }
+  };
+
+  // ---------------- GENERIC: close any modal via ✕ button or backdrop click ----------------
+  document.querySelectorAll('.modal-close[data-close]').forEach(btn=>{
+    btn.onclick = ()=> document.getElementById(btn.dataset.close).classList.remove('show');
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(bd=>{
+    bd.addEventListener('click', e=>{ if (e.target === bd) bd.classList.remove('show'); });
+  });
+  function genericDropzone(dz, input, onFiles){
+    dz.onclick = ()=> input.click();
+    dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+    dz.addEventListener('drop', e=>{
+      e.preventDefault(); dz.classList.remove('drag');
+      if (e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
+    });
+    input.addEventListener('change', e=>{ if (e.target.files.length) onFiles(e.target.files); e.target.value=''; });
+  }
+  async function renderPdfPageImages(pdfDoc, scale){
+    const pages = [];
+    for (let i=1; i<=pdfDoc.numPages; i++){
+      const page = await pdfDoc.getPage(i);
+      const viewport = page.getViewport({scale: scale || 1.5});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+      pages.push({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), width: viewport.width, height: viewport.height });
+    }
+    return pages;
+  }
+
+  // ================= JPG TO PDF =================
+  (function(){
+    document.getElementById('btnOpenJpgModal').onclick = ()=> document.getElementById('jpgModalBackdrop').classList.add('show');
+    let items = [];
+    const list = document.getElementById('jpgList');
+    const btn = document.getElementById('btnConvertJpg');
+    function render(){
+      list.innerHTML = '';
+      items.forEach((it, idx)=>{
+        const li = document.createElement('li');
+        const img = document.createElement('img'); img.src = it.dataUrl;
+        const name = document.createElement('span'); name.className='list-name'; name.textContent = it.name;
+        const rm = document.createElement('button'); rm.className='remove'; rm.textContent='remove';
+        rm.onclick = ()=>{ items.splice(idx,1); render(); };
+        li.append(img, name, rm);
+        list.appendChild(li);
+      });
+      btn.disabled = items.length === 0;
+    }
+    genericDropzone(document.getElementById('dzJpgModal'), document.getElementById('jpgModalInput'), files=>{
+      [...files].forEach(file=>{
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = ev=>{
+          const img = new Image();
+          img.onload = ()=>{
+            let format = 'JPEG', src = ev.target.result;
+            if (file.type === 'image/png') format = 'PNG';
+            else if (file.type !== 'image/jpeg' && file.type !== 'image/jpg'){
+              const c = document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
+              c.getContext('2d').drawImage(img,0,0);
+              src = c.toDataURL('image/png'); format='PNG';
+            }
+            items.push({ name:file.name, dataUrl:src, format, w:img.naturalWidth, h:img.naturalHeight });
+            render();
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+    btn.onclick = async ()=>{
+      if (!items.length) return;
+      showOverlay('Building your PDF…');
+      try{
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p','pt','a4');
+        const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+        const margin = 42;
+        items.forEach((it, idx)=>{
+          if (idx>0) pdf.addPage();
+          const availW = pageW-2*margin, availH = pageH-2*margin;
+          const scale = Math.min(availW/it.w, availH/it.h);
+          const dw = it.w*scale, dh = it.h*scale;
+          pdf.addImage(it.dataUrl, it.format, (pageW-dw)/2, (pageH-dh)/2, dw, dh, undefined, 'NONE');
+        });
+        pdf.save('images.pdf');
+      } catch(err){ console.error(err); alert('Something went wrong creating the PDF.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= MERGE PDF =================
+  (function(){
+    document.getElementById('btnOpenMergeModal').onclick = ()=> document.getElementById('mergeModalBackdrop').classList.add('show');
+    let files = [];
+    const list = document.getElementById('mergeList');
+    const btn = document.getElementById('btnMergePdf');
+    function render(){
+      list.innerHTML = '';
+      files.forEach((f, idx)=>{
+        const li = document.createElement('li');
+        const name = document.createElement('span'); name.className='list-name'; name.textContent = f.name;
+        const up = document.createElement('button'); up.textContent='↑';
+        up.onclick = ()=>{ if (idx>0){ [files[idx-1],files[idx]]=[files[idx],files[idx-1]]; render(); } };
+        const down = document.createElement('button'); down.textContent='↓';
+        down.onclick = ()=>{ if (idx<files.length-1){ [files[idx+1],files[idx]]=[files[idx],files[idx+1]]; render(); } };
+        const rm = document.createElement('button'); rm.className='remove'; rm.textContent='remove';
+        rm.onclick = ()=>{ files.splice(idx,1); render(); };
+        li.append(name, up, down, rm);
+        list.appendChild(li);
+      });
+      btn.disabled = files.length < 2;
+    }
+    genericDropzone(document.getElementById('dzMergeModal'), document.getElementById('mergeModalInput'), fl=>{
+      [...fl].forEach(f=>{ if (f.name.toLowerCase().endsWith('.pdf')) files.push(f); });
+      render();
+    });
+    btn.onclick = async ()=>{
+      showOverlay('Merging your PDFs…');
+      try{
+        const merged = await PDFLib.PDFDocument.create();
+        for (const f of files){
+          const bytes = await f.arrayBuffer();
+          const src = await PDFLib.PDFDocument.load(bytes);
+          const pages = await merged.copyPages(src, src.getPageIndices());
+          pages.forEach(p=> merged.addPage(p));
+        }
+        const outBytes = await merged.save();
+        downloadBlob(new Blob([outBytes], {type:'application/pdf'}), 'merged.pdf');
+      } catch(err){ console.error(err); alert('Could not merge these PDFs. Make sure they are valid, non-password-protected PDF files.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= SPLIT PDF =================
+  (function(){
+    document.getElementById('btnOpenSplitModal').onclick = ()=> document.getElementById('splitModalBackdrop').classList.add('show');
+    let file = null, mode = 'each';
+    const chip = document.getElementById('splitModalChip');
+    const nameEl = document.getElementById('splitModalFileName');
+    const btn = document.getElementById('btnSplitPdf');
+    const status = document.getElementById('splitStatus');
+    document.querySelectorAll('[data-splitmode]').forEach(chipEl=>{
+      chipEl.onclick = ()=>{
+        document.querySelectorAll('[data-splitmode]').forEach(c=>c.classList.remove('active'));
+        chipEl.classList.add('active');
+        mode = chipEl.dataset.splitmode;
+        document.getElementById('splitAtField').style.display = mode === 'at' ? 'block' : 'none';
+      };
+    });
+    genericDropzone(document.getElementById('dzSplitModal'), document.getElementById('splitModalInput'), fl=>{
+      const f = fl[0]; if (!f || !f.name.toLowerCase().endsWith('.pdf')) return;
+      file = f; nameEl.textContent = f.name; chip.style.display='flex'; btn.disabled = false; status.textContent='';
+    });
+    document.getElementById('splitModalClear').onclick = ()=>{ file=null; chip.style.display='none'; btn.disabled=true; };
+    btn.onclick = async ()=>{
+      if (!file) return;
+      showOverlay('Splitting your PDF…');
+      status.textContent = '';
+      try{
+        const bytes = await file.arrayBuffer();
+        const src = await PDFLib.PDFDocument.load(bytes);
+        const total = src.getPageCount();
+        const zip = new JSZip();
+        const baseName = file.name.replace(/\.pdf$/i,'');
+        if (mode === 'each'){
+          for (let i=0;i<total;i++){
+            const out = await PDFLib.PDFDocument.create();
+            const [p] = await out.copyPages(src, [i]);
+            out.addPage(p);
+            const b = await out.save();
+            zip.file(baseName + '-page-' + (i+1) + '.pdf', b);
+          }
+        } else {
+          const splitAt = Math.min(Math.max(1, parseInt(document.getElementById('splitAtValue').value)||1), total-1);
+          const out1 = await PDFLib.PDFDocument.create();
+          const pages1 = await out1.copyPages(src, [...Array(splitAt).keys()]);
+          pages1.forEach(p=>out1.addPage(p));
+          const out2 = await PDFLib.PDFDocument.create();
+          const idx2 = [...Array(total-splitAt).keys()].map(n=>n+splitAt);
+          const pages2 = await out2.copyPages(src, idx2);
+          pages2.forEach(p=>out2.addPage(p));
+          zip.file(baseName + '-part1.pdf', await out1.save());
+          zip.file(baseName + '-part2.pdf', await out2.save());
+        }
+        const blob = await zip.generateAsync({type:'blob'});
+        downloadBlob(blob, baseName + '-split.zip');
+        status.textContent = 'Done — check your downloads for the .zip file.';
+      } catch(err){ console.error(err); alert('Could not split this PDF. Make sure it is a valid, non-password-protected PDF file.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= COMPRESS PDF =================
+  (function(){
+    document.getElementById('btnOpenCompressModal').onclick = ()=> document.getElementById('compressModalBackdrop').classList.add('show');
+    let file = null;
+    const chip = document.getElementById('compressModalChip');
+    const nameEl = document.getElementById('compressModalFileName');
+    const btn = document.getElementById('btnCompressPdf');
+    const status = document.getElementById('compressStatus');
+    genericDropzone(document.getElementById('dzCompressModal'), document.getElementById('compressModalInput'), fl=>{
+      const f = fl[0]; if (!f || !f.name.toLowerCase().endsWith('.pdf')) return;
+      file = f; nameEl.textContent = f.name; chip.style.display='flex'; btn.disabled=false; status.textContent='';
+    });
+    document.getElementById('compressModalClear').onclick = ()=>{ file=null; chip.style.display='none'; btn.disabled=true; };
+    btn.onclick = async ()=>{
+      if (!file) return;
+      showOverlay('Compressing your PDF…');
+      status.textContent = '';
+      try{
+        const level = document.getElementById('compressLevel').value;
+        const presets = { low:{dpi:72, q:0.5}, medium:{dpi:110, q:0.65}, high:{dpi:150, q:0.8} };
+        const { dpi, q } = presets[level];
+        const bytes = await file.arrayBuffer();
+        const originalSize = bytes.byteLength;
+        const pdfDoc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+        const { jsPDF } = window.jspdf;
+        let outPdf = null;
+        for (let i=1; i<=pdfDoc.numPages; i++){
+          const page = await pdfDoc.getPage(i);
+          const view = page.view;
+          const wPt = view[2]-view[0], hPt = view[3]-view[1];
+          const scale = dpi/72;
+          const viewport = page.getViewport({scale});
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+          const jpegData = canvas.toDataURL('image/jpeg', q);
+          if (!outPdf) outPdf = new jsPDF({unit:'pt', format:[wPt,hPt]});
+          else outPdf.addPage([wPt,hPt]);
+          outPdf.addImage(jpegData, 'JPEG', 0, 0, wPt, hPt);
+        }
+        const outBytes = outPdf.output('arraybuffer');
+        const newSize = outBytes.byteLength;
+        outPdf.save(file.name.replace(/\.pdf$/i,'') + '-compressed.pdf');
+        const pct = Math.round((1 - newSize/originalSize) * 100);
+        status.textContent = pct > 0
+          ? ('Done — roughly ' + pct + '% smaller than the original.')
+          : 'Done — this PDF was already small, so the size may not shrink much.';
+      } catch(err){ console.error(err); alert('Could not compress this PDF. Make sure it is a valid, non-password-protected PDF file.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= PDF TO POWERPOINT =================
+  (function(){
+    document.getElementById('btnOpenPptModal').onclick = ()=> document.getElementById('pptModalBackdrop').classList.add('show');
+    let file = null;
+    const chip = document.getElementById('pptModalChip');
+    const nameEl = document.getElementById('pptModalFileName');
+    const btn = document.getElementById('btnConvertPpt');
+    const status = document.getElementById('pptStatus');
+    genericDropzone(document.getElementById('dzPptModal'), document.getElementById('pptModalInput'), fl=>{
+      const f = fl[0]; if (!f || !f.name.toLowerCase().endsWith('.pdf')) return;
+      file = f; nameEl.textContent = f.name; chip.style.display='flex'; btn.disabled=false; status.textContent='';
+    });
+    document.getElementById('pptModalClear').onclick = ()=>{ file=null; chip.style.display='none'; btn.disabled=true; };
+    btn.onclick = async ()=>{
+      if (!file) return;
+      showOverlay('Building your slides…');
+      status.textContent = '';
+      try{
+        const bytes = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+        const pages = await renderPdfPageImages(pdfDoc, 1.8);
+        const pptx = new PptxGenJS();
+        const SLIDE_W = 10, SLIDE_H = 7.5;
+        pages.forEach(pg=>{
+          const slide = pptx.addSlide();
+          const imgAspect = pg.width/pg.height, boxAspect = SLIDE_W/SLIDE_H;
+          let dw, dh;
+          if (imgAspect > boxAspect){ dw = SLIDE_W; dh = SLIDE_W/imgAspect; }
+          else { dh = SLIDE_H; dw = SLIDE_H*imgAspect; }
+          slide.addImage({ data: pg.dataUrl, x:(SLIDE_W-dw)/2, y:(SLIDE_H-dh)/2, w:dw, h:dh });
+        });
+        await pptx.writeFile({ fileName: file.name.replace(/\.pdf$/i,'') + '.pptx' });
+        status.textContent = 'Done.';
+      } catch(err){ console.error(err); alert('Could not convert this PDF. Make sure it is a valid, non-password-protected PDF file.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= CROP PDF =================
+  (function(){
+    document.getElementById('btnOpenCropModal').onclick = ()=> document.getElementById('cropModalBackdrop').classList.add('show');
+    let file = null, firstPageDims = null;
+    const chip = document.getElementById('cropModalChip');
+    const nameEl = document.getElementById('cropModalFileName');
+    const btn = document.getElementById('btnApplyCrop');
+    const status = document.getElementById('cropStatus');
+    const previewWrap = document.getElementById('cropPreviewWrap');
+    const previewImg = document.getElementById('cropPreviewImg');
+    const boxOverlay = document.getElementById('cropBoxOverlay');
+
+    function updateOverlay(){
+      const t = +document.getElementById('cropTop').value||0;
+      const b = +document.getElementById('cropBottom').value||0;
+      const l = +document.getElementById('cropLeft').value||0;
+      const r = +document.getElementById('cropRight').value||0;
+      boxOverlay.style.top = t + '%'; boxOverlay.style.bottom = b + '%';
+      boxOverlay.style.left = l + '%'; boxOverlay.style.right = r + '%';
+    }
+    ['cropTop','cropBottom','cropLeft','cropRight'].forEach(id=>{
+      document.getElementById(id).addEventListener('input', updateOverlay);
+    });
+
+    genericDropzone(document.getElementById('dzCropModal'), document.getElementById('cropModalInput'), async fl=>{
+      const f = fl[0]; if (!f || !f.name.toLowerCase().endsWith('.pdf')) return;
+      file = f; nameEl.textContent = f.name; chip.style.display='flex'; btn.disabled=false; status.textContent='';
+      showOverlay('Loading preview…');
+      try{
+        const bytes = await f.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+        const page = await pdfDoc.getPage(1);
+        firstPageDims = { w: page.view[2]-page.view[0], h: page.view[3]-page.view[1] };
+        const viewport = page.getViewport({scale: 500/(page.view[2]-page.view[0])});
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+        previewImg.src = canvas.toDataURL('image/jpeg', 0.85);
+        previewWrap.style.display = 'inline-block';
+        updateOverlay();
+      } catch(err){ console.error(err); alert('Could not preview this PDF.'); }
+      finally { hideOverlay(); }
+    });
+    document.getElementById('cropModalClear').onclick = ()=>{
+      file=null; chip.style.display='none'; btn.disabled=true; previewWrap.style.display='none';
+    };
+    btn.onclick = async ()=>{
+      if (!file) return;
+      showOverlay('Cropping your PDF…');
+      status.textContent = '';
+      try{
+        const t = (+document.getElementById('cropTop').value||0)/100;
+        const b = (+document.getElementById('cropBottom').value||0)/100;
+        const l = (+document.getElementById('cropLeft').value||0)/100;
+        const r = (+document.getElementById('cropRight').value||0)/100;
+        const scope = document.getElementById('cropScope').value;
+        const bytes = await file.arrayBuffer();
+        const pdfDoc = await PDFLib.PDFDocument.load(bytes);
+        const pages = pdfDoc.getPages();
+        const targets = scope === 'first' ? [pages[0]] : pages;
+        targets.forEach(page=>{
+          const { width, height } = page.getSize();
+          const x = width*l, y = height*b;
+          const w = width*(1-l-r), h = height*(1-t-b);
+          page.setCropBox(x, y, Math.max(w,10), Math.max(h,10));
+        });
+        const outBytes = await pdfDoc.save();
+        downloadBlob(new Blob([outBytes], {type:'application/pdf'}), file.name.replace(/\.pdf$/i,'') + '-cropped.pdf');
+        status.textContent = 'Done.';
+      } catch(err){ console.error(err); alert('Could not crop this PDF. Make sure it is a valid, non-password-protected PDF file.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  // ================= ADD PAGE NUMBERS =================
+  (function(){
+    document.getElementById('btnOpenPageNumModal').onclick = ()=> document.getElementById('pageNumModalBackdrop').classList.add('show');
+    let file = null;
+    const chip = document.getElementById('pageNumModalChip');
+    const nameEl = document.getElementById('pageNumModalFileName');
+    const btn = document.getElementById('btnApplyPageNum');
+    const status = document.getElementById('pageNumStatus');
+    genericDropzone(document.getElementById('dzPageNumModal'), document.getElementById('pageNumModalInput'), fl=>{
+      const f = fl[0]; if (!f || !f.name.toLowerCase().endsWith('.pdf')) return;
+      file = f; nameEl.textContent = f.name; chip.style.display='flex'; btn.disabled=false; status.textContent='';
+    });
+    document.getElementById('pageNumModalClear').onclick = ()=>{ file=null; chip.style.display='none'; btn.disabled=true; };
+    btn.onclick = async ()=>{
+      if (!file) return;
+      showOverlay('Adding page numbers…');
+      status.textContent = '';
+      try{
+        const position = document.getElementById('pageNumPosition').value;
+        const start = parseInt(document.getElementById('pageNumStart').value) || 1;
+        const bytes = await file.arrayBuffer();
+        const pdfDoc = await PDFLib.PDFDocument.load(bytes);
+        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+        const pages = pdfDoc.getPages();
+        const size = 10, margin = 28;
+        pages.forEach((page, idx)=>{
+          const { width, height } = page.getSize();
+          const text = String(start + idx);
+          const tw = font.widthOfTextAtSize(text, size);
+          let x, y;
+          if (position.startsWith('bottom')) y = margin; else y = height - margin - size;
+          if (position.endsWith('center')) x = (width - tw)/2;
+          else if (position.endsWith('right')) x = width - margin - tw;
+          else x = margin;
+          page.drawText(text, { x, y, size, font, color: PDFLib.rgb(0.13,0.12,0.10) });
+        });
+        const outBytes = await pdfDoc.save();
+        downloadBlob(new Blob([outBytes], {type:'application/pdf'}), file.name.replace(/\.pdf$/i,'') + '-numbered.pdf');
+        status.textContent = 'Done.';
+      } catch(err){ console.error(err); alert('Could not add page numbers. Make sure it is a valid, non-password-protected PDF file.'); }
+      finally { hideOverlay(); }
+    };
+  })();
+
+  updateEmptyState();
+  renderPagination();
+})();
+</script>
+</body>
+</html>
